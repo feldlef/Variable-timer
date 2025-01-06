@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Random Touch Instructions</title>
+    <style>
+      /* Basic styling */
+      body {
+        margin: 0; 
+        padding: 0;
+        font-family: sans-serif;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        height: 100vh;
+        text-align: center;
+      }
+      #instruction {
+        font-size: 1.5rem;
+        margin-bottom: 20px;
+        padding: 0 20px;
+      }
+      #touch-area {
+        width: 80%;
+        height: 40%;
+        border: 2px dashed #ccc;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        touch-action: none; /* Ensures touch events are captured properly on mobile */
+      }
+      #touch-area p {
+        margin: 0;
+        font-size: 1.2rem;
+        color: #777;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="instruction">Loading...</div>
+    <div id="touch-area"><p>Touch here</p></div>
+
+    <script>
+      // ========== Global references ==========
+      const instructionDiv = document.getElementById('instruction');
+      let touchArea = document.getElementById('touch-area');
+
+      // ========== Utility Functions ==========
+
+      // Get a random integer between min and max (inclusive)
+      function getRandomInt(min, max) {
+        return Math.floor(Math.random() * (max - min + 1)) + min;
+      }
+
+      // Generate a random instruction object
+      function getRandomInstruction() {
+        const instructionTypes = ['HOLD', 'TAP_QUICK', 'TAP_SLOW', 'TAP_HOLD'];
+        const randomType = instructionTypes[Math.floor(Math.random() * instructionTypes.length)];
+
+        switch (randomType) {
+          case 'HOLD': {
+            const seconds = getRandomInt(3, 10);
+            return {
+              type: 'HOLD',
+              seconds,
+              message: `Touch and hold for ${seconds} second${seconds > 1 ? 's' : ''}`
+            };
+          }
+          case 'TAP_QUICK': {
+            const count = getRandomInt(3, 8);
+            return {
+              type: 'TAP_QUICK',
+              count,
+              message: `Tap the screen ${count} times quickly`
+            };
+          }
+          case 'TAP_SLOW': {
+            const count = getRandomInt(3, 8);
+            return {
+              type: 'TAP_SLOW',
+              count,
+              message: `Tap the screen ${count} times slowly`
+            };
+          }
+          case 'TAP_HOLD': {
+            const count = getRandomInt(2, 5);
+            const holdSeconds = getRandomInt(2, 5);
+            return {
+              type: 'TAP_HOLD',
+              count,
+              holdSeconds,
+              message: `Tap ${count} times, holding each touch for ${holdSeconds} second${holdSeconds > 1 ? 's' : ''}`
+            };
+          }
+        }
+      }
+
+      // Remove all event listeners from #touch-area by cloning and replacing it
+      function removeAllListeners() {
+        const newTouchArea = touchArea.cloneNode(true);
+        touchArea.parentNode.replaceChild(newTouchArea, touchArea);
+        touchArea = newTouchArea; // update our reference
+      }
+
+      // Called when the user completes the current instruction
+      function completeInstruction() {
+        removeAllListeners();
+        showNextInstruction();
+      }
+
+      // ========== Instruction Handlers ==========
+
+      // 1) HOLD for X seconds
+      function startHold(seconds) {
+        let holdTimeout;
+        let isHolding = false;
+
+        function onTouchStart() {
+          isHolding = true;
+          holdTimeout = setTimeout(() => {
+            if (isHolding) {
+              completeInstruction();
+            }
+          }, seconds * 1000);
+        }
+
+        function onTouchEnd() {
+          isHolding = false;
+          clearTimeout(holdTimeout);
+        }
+
+        touchArea.addEventListener('touchstart', onTouchStart);
+        touchArea.addEventListener('touchend', onTouchEnd);
+      }
+
+      // 2) Tap N times quickly (all taps within a time limit, e.g. 2 seconds total)
+      function startQuickTaps(countRequired) {
+        let taps = [];
+        const TIME_LIMIT = 2000; // 2 seconds
+
+        function onTouchStart() {
+          const now = Date.now();
+          taps.push(now);
+
+          // If we've reached required taps, check the time span
+          if (taps.length === countRequired) {
+            const timeSpan = taps[taps.length - 1] - taps[0];
+            if (timeSpan <= TIME_LIMIT) {
+              // Completed within time
+              completeInstruction();
+            }
+            // Reset taps for next attempt
+            taps = [];
+          }
+        }
+
+        touchArea.addEventListener('touchstart', onTouchStart);
+      }
+
+      // 3) Tap N times slowly (define "slow" as at least 1s gap between taps)
+      function startSlowTaps(countRequired) {
+        let lastTap = 0;
+        let tapCount = 0;
+        const MIN_GAP = 1000; // 1 second gap
+
+        function onTouchStart() {
+          const now = Date.now();
+          // Check if there's enough gap from the previous tap
+          if (now - lastTap >= MIN_GAP) {
+            tapCount++;
+            lastTap = now;
+            if (tapCount === countRequired) {
+              completeInstruction();
+            }
+          } else {
+            // If tapped too quickly, reset
+            tapCount = 1;
+            lastTap = now;
+          }
+        }
+
+        touchArea.addEventListener('touchstart', onTouchStart);
+      }
+
+      // 4) Tap N times, each hold M seconds
+      function startMultipleHolds(count, holdSeconds) {
+        let successfulHolds = 0;
+        let holdTimer;
+        let isHolding = false;
+
+        function onTouchStart() {
+          isHolding = true;
+          // Start a timer; if the user holds long enough, increment
+          holdTimer = setTimeout(() => {
+            if (isHolding) {
+              successfulHolds++;
+            }
+          }, holdSeconds * 1000);
+        }
+
+        function onTouchEnd() {
+          isHolding = false;
+          clearTimeout(holdTimer);
+          // Check if we just completed a hold
+          if (successfulHolds >= count) {
+            completeInstruction();
+          }
+        }
+
+        touchArea.addEventListener('touchstart', onTouchStart);
+        touchArea.addEventListener('touchend', onTouchEnd);
+      }
+
+      // ========== Main Flow: Show Next Instruction ==========
+
+      function showNextInstruction() {
+        const instr = getRandomInstruction();
+        instructionDiv.textContent = instr.message;
+
+        switch (instr.type) {
+          case 'HOLD':
+            startHold(instr.seconds);
+            break;
+          case 'TAP_QUICK':
+            startQuickTaps(instr.count);
+            break;
+          case 'TAP_SLOW':
+            startSlowTaps(instr.count);
+            break;
+          case 'TAP_HOLD':
+            startMultipleHolds(instr.count, instr.holdSeconds);
+            break;
+        }
+      }
+
+      // On page load, show the first instruction
+      document.addEventListener('DOMContentLoaded', () => {
+        showNextInstruction();
+      });
+    </script>
+  </body>
+</html>
